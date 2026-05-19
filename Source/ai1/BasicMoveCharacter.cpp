@@ -142,11 +142,11 @@ void ABasicMoveCharacter::InitializeInputAssets()
 		Pitch.Modifiers.Add(NewObject<UInputModifierNegate>(this));
 	}
 
-	// 空格 = 跳跃
-	DefaultMappingContext->MapKey(JumpAction, EKeys::SpaceBar);
+	// 空格 = 按住飞行
+	DefaultMappingContext->MapKey(FlyAction, EKeys::SpaceBar);
 
-	// 左 Shift = 飞行
-	DefaultMappingContext->MapKey(FlyAction, EKeys::LeftShift);
+	// 左 Shift = 跳跃
+	DefaultMappingContext->MapKey(JumpAction, EKeys::LeftShift);
 
 	UE_LOG(LogBasicMove, Warning, TEXT("Input assets created: MoveFwd/MoveRht/LookYaw/LookPitch/Jump/Fly"));
 }
