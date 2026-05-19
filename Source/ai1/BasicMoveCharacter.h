@@ -89,12 +89,11 @@ protected:
 
 	// ==================== 飞行参数 ====================
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Flight")
-	float FlyingAcceleration = 4000.f;
-
+	/** 飞行最大速度 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Flight")
 	float FlyingMaxSpeed = 2000.f;
 
+	/** 飞行速度平滑度（越高响应越快） */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Flight")
-	float FlyingBrakingDeceleration = 1000.f;
+	float FlyingInterpSpeed = 8.f;
 };

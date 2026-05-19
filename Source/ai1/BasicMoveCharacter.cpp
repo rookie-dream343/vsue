@@ -194,9 +194,6 @@ void ABasicMoveCharacter::Input_MoveForward(const FInputActionValue& Value)
 	const float Axis = Value.Get<float>();
 	if (!Controller || FMath::IsNearlyZero(Axis)) return;
 
-	UE_LOG(LogBasicMove, Warning, TEXT("MoveForward: %.2f Fly=%d"), Axis, bIsFlying);
-	GEngine->AddOnScreenDebugMessage(-1, 0.05f, FColor::Green, FString::Printf(TEXT("FWD %.1f"), Axis));
-
 	if (bIsFlying)
 	{
 		const FRotator Rot = Controller->GetControlRotation();
@@ -213,9 +210,6 @@ void ABasicMoveCharacter::Input_MoveRight(const FInputActionValue& Value)
 {
 	const float Axis = Value.Get<float>();
 	if (!Controller || FMath::IsNearlyZero(Axis)) return;
-
-	UE_LOG(LogBasicMove, Warning, TEXT("MoveRight: %.2f Fly=%d"), Axis, bIsFlying);
-	GEngine->AddOnScreenDebugMessage(-1, 0.05f, FColor::Yellow, FString::Printf(TEXT("RHT %.1f"), Axis));
 
 	if (bIsFlying)
 	{
@@ -275,10 +269,6 @@ void ABasicMoveCharacter::Tick(float DeltaTime)
 		CR.Pitch  = FMath::Clamp(CR.Pitch + PendingLookDelta.Y, -89.9f, 89.9f);
 		CR.Roll   = 0.f;
 		Controller->SetControlRotation(CR);
-
-		GEngine->AddOnScreenDebugMessage(-1, DeltaTime, FColor::Cyan,
-			FString::Printf(TEXT("CAM Yaw=%.1f Pitch=%.1f"), CR.Yaw, CR.Pitch));
-
 		PendingLookDelta = FVector2D::ZeroVector;
 	}
 
@@ -295,18 +285,17 @@ void ABasicMoveCharacter::Tick(float DeltaTime)
 void ABasicMoveCharacter::Input_FlyPressed()
 {
 	UCharacterMovementComponent* MC = GetCharacterMovement();
-	if (!MC || MC->MovementMode == MOVE_Flying) return;
+	if (!MC || bIsFlying) return;
 
 	bIsFlying = true;
-	MC->SetMovementMode(MOVE_Flying);
-	MC->MaxFlySpeed = FlyingMaxSpeed;
-	MC->MaxAcceleration = FlyingAcceleration;
-	MC->BrakingDecelerationFlying = FlyingBrakingDeceleration;
-	MC->bOrientRotationToMovement = false;
 
+	// 保持 MOVE_Falling，但禁用重力——这样飞行不受 PhysFalling 干扰，完全由 Tick 控速
+	MC->GravityScale = 0.f;
+	MC->Velocity.Z = 0.f;            // 清除残余下坠速度
+	MC->bOrientRotationToMovement = false;
 	bUseControllerRotationYaw = true;
 
-	UE_LOG(LogBasicMove, Log, TEXT("Fly ON"));
+	UE_LOG(LogBasicMove, Warning, TEXT("Fly ON"));
 }
 
 void ABasicMoveCharacter::Input_FlyReleased()
@@ -318,29 +307,26 @@ void ABasicMoveCharacter::Input_FlyReleased()
 	UCharacterMovementComponent* MC = GetCharacterMovement();
 	if (MC)
 	{
-		MC->SetMovementMode(MOVE_Falling);
-		MC->MaxFlySpeed = 600.f;
-		MC->MaxAcceleration = 2048.f;
-		MC->BrakingDecelerationFlying = 0.f;
+		MC->GravityScale = 1.f;      // 恢复重力 → 自然坠落
 		MC->bOrientRotationToMovement = true;
 	}
 
 	bUseControllerRotationYaw = false;
 
-	UE_LOG(LogBasicMove, Log, TEXT("Fly OFF → falling"));
+	UE_LOG(LogBasicMove, Warning, TEXT("Fly OFF → falling"));
 }
 
 void ABasicMoveCharacter::MaintainFlight(float DeltaTime)
 {
 	UCharacterMovementComponent* MC = GetCharacterMovement();
-	if (!MC || MC->MovementMode != MOVE_Flying) return;
+	if (!MC || !bIsFlying) return;
 
-	// 无垂直输入时 -> 悬停（平滑消除 Z 轴速度）
-	const FVector Input = MC->GetLastInputVector();
-	if (FMath::IsNearlyZero(Input.Z, 0.01f))
-	{
-		FVector Vel = MC->Velocity;
-		Vel.Z = FMath::FInterpTo(Vel.Z, 0.f, DeltaTime, 3.f);
-		MC->Velocity = Vel;
-	}
+	// 获取当前输入方向（由 AddMovementInput 累积）
+	const FVector InputDir = MC->GetLastInputVector();
+
+	// 目标速度 = 输入方向 × 最大速度
+	const FVector Target = InputDir.GetSafeNormal() * FlyingMaxSpeed;
+
+	// 平滑插值当前速度 → 目标速度
+	MC->Velocity = FMath::VInterpTo(MC->Velocity, Target, DeltaTime, FlyingInterpSpeed);
 }
