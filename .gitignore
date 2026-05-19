@@ -1,0 +1,32 @@
+# Unreal Engine
+Binaries/
+DerivedDataCache/
+Intermediate/
+Saved/
+*.sln
+*.suo
+*.xcodeproj
+*.xcworkspace
+.vs/
+.vscode/
+*.VC.db
+*.opensdf
+*.sdf
+*.opendb
+
+# Content
+Content/__ExternalActors__/
+Content/__ExternalObjects__/
+
+# Build
+Build/
+
+# Others
+*.log
+*.pdb
+*.lib
+*.exp
+*.exe
+*.dll
+*.so
+*.dylib
