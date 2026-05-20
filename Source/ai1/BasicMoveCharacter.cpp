@@ -7,6 +7,7 @@
 #include "EnhancedInputComponent.h"
 #include "EnhancedInputSubsystems.h"
 #include "Engine/LocalPlayer.h"
+#include "Fireball.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "GameFramework/Controller.h"
 #include "GameFramework/SpringArmComponent.h"
@@ -116,6 +117,9 @@ void ABasicMoveCharacter::InitializeInputAssets()
 	FlyAction = NewObject<UInputAction>(this, UInputAction::StaticClass(), TEXT("IA_Fly"));
 	FlyAction->ValueType = EInputActionValueType::Boolean;
 
+	ShootAction = NewObject<UInputAction>(this, UInputAction::StaticClass(), TEXT("IA_Shoot"));
+	ShootAction->ValueType = EInputActionValueType::Boolean;
+
 	// ---- InputMappingContext ----
 	DefaultMappingContext = NewObject<UInputMappingContext>(this, UInputMappingContext::StaticClass(), TEXT("IMC_Default"));
 
@@ -148,7 +152,10 @@ void ABasicMoveCharacter::InitializeInputAssets()
 	// 左 Shift = 跳跃
 	DefaultMappingContext->MapKey(JumpAction, EKeys::LeftShift);
 
-	UE_LOG(LogBasicMove, Warning, TEXT("Input assets created: MoveFwd/MoveRht/LookYaw/LookPitch/Jump/Fly"));
+	// 鼠标左键 = 发射火球
+	DefaultMappingContext->MapKey(ShootAction, EKeys::LeftMouseButton);
+
+	UE_LOG(LogBasicMove, Warning, TEXT("Input assets created: MoveFwd/MoveRht/LookYaw/LookPitch/Jump/Fly/Shoot"));
 }
 
 // ============================================================================
@@ -181,6 +188,7 @@ void ABasicMoveCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInput
 	EnhancedInput->BindAction(JumpAction,        ETriggerEvent::Completed, this, &ABasicMoveCharacter::Input_JumpReleased);
 	EnhancedInput->BindAction(FlyAction,         ETriggerEvent::Started,   this, &ABasicMoveCharacter::Input_FlyPressed);
 	EnhancedInput->BindAction(FlyAction,         ETriggerEvent::Completed, this, &ABasicMoveCharacter::Input_FlyReleased);
+	EnhancedInput->BindAction(ShootAction,       ETriggerEvent::Started,   this, &ABasicMoveCharacter::Input_Shoot);
 
 	UE_LOG(LogBasicMove, Warning, TEXT("All 6 actions bound to EnhancedInputComponent — IMC will be added in BeginPlay via PlayerController"));
 }
@@ -196,8 +204,7 @@ void ABasicMoveCharacter::Input_MoveForward(const FInputActionValue& Value)
 
 	if (bIsFlying)
 	{
-		const FRotator Rot = Controller->GetControlRotation();
-		AddMovementInput(FRotationMatrix(Rot).GetUnitAxis(EAxis::X), Axis);
+		FlightInputAxis.X = Axis;  // 飞行时不走 AddMovementInput，自己记录
 	}
 	else
 	{
@@ -213,8 +220,7 @@ void ABasicMoveCharacter::Input_MoveRight(const FInputActionValue& Value)
 
 	if (bIsFlying)
 	{
-		const FRotator Rot = Controller->GetControlRotation();
-		AddMovementInput(FRotationMatrix(Rot).GetUnitAxis(EAxis::Y), Axis);
+		FlightInputAxis.Y = Axis;  // 飞行时不走 AddMovementInput，自己记录
 	}
 	else
 	{
@@ -279,6 +285,32 @@ void ABasicMoveCharacter::Tick(float DeltaTime)
 }
 
 // ============================================================================
+// 攻击
+// ============================================================================
+
+void ABasicMoveCharacter::Input_Shoot()
+{
+	if (!Controller) return;
+
+	// 发射位置：角色位置 + 眼睛高度偏移
+	const FVector SpawnLoc = GetActorLocation() + FVector(0.f, 0.f, 50.f);
+
+	// 发射方向：相机朝向（含 Pitch）
+	const FVector ShootDir = Controller->GetControlRotation().Vector();
+
+	FActorSpawnParameters Params;
+	Params.Owner = this;
+	Params.Instigator = GetInstigator();
+	Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+
+	AFireball* Ball = GetWorld()->SpawnActor<AFireball>(AFireball::StaticClass(), SpawnLoc, ShootDir.Rotation(), Params);
+	if (Ball)
+	{
+		Ball->FireInDirection(ShootDir);
+	}
+}
+
+// ============================================================================
 // 飞行
 // ============================================================================
 
@@ -289,13 +321,13 @@ void ABasicMoveCharacter::Input_FlyPressed()
 
 	bIsFlying = true;
 
-	// 保持 MOVE_Falling，但禁用重力——这样飞行不受 PhysFalling 干扰，完全由 Tick 控速
-	MC->GravityScale = 0.f;
-	MC->Velocity.Z = 0.f;            // 清除残余下坠速度
+	// 切到 MOVE_Custom 模式，彻底绕过 PhysFalling/PhysFlying
+	MC->SetMovementMode(MOVE_Custom, 1);
+	MC->Velocity = FVector::ZeroVector;
 	MC->bOrientRotationToMovement = false;
 	bUseControllerRotationYaw = true;
 
-	UE_LOG(LogBasicMove, Warning, TEXT("Fly ON"));
+	UE_LOG(LogBasicMove, Warning, TEXT("Fly ON (Custom mode)"));
 }
 
 void ABasicMoveCharacter::Input_FlyReleased()
@@ -303,17 +335,18 @@ void ABasicMoveCharacter::Input_FlyReleased()
 	if (!bIsFlying) return;
 
 	bIsFlying = false;
+	FlightInputAxis = FVector2D::ZeroVector;
 
 	UCharacterMovementComponent* MC = GetCharacterMovement();
 	if (MC)
 	{
-		MC->GravityScale = 1.f;      // 恢复重力 → 自然坠落
+		MC->SetMovementMode(MOVE_Falling);
 		MC->bOrientRotationToMovement = true;
 	}
 
 	bUseControllerRotationYaw = false;
 
-	UE_LOG(LogBasicMove, Warning, TEXT("Fly OFF → falling"));
+	UE_LOG(LogBasicMove, Warning, TEXT("Fly OFF  falling"));
 }
 
 void ABasicMoveCharacter::MaintainFlight(float DeltaTime)
@@ -321,12 +354,31 @@ void ABasicMoveCharacter::MaintainFlight(float DeltaTime)
 	UCharacterMovementComponent* MC = GetCharacterMovement();
 	if (!MC || !bIsFlying) return;
 
-	// 获取当前输入方向（由 AddMovementInput 累积）
-	const FVector InputDir = MC->GetLastInputVector();
+	// 用 FlightInputAxis + 相机方向 计算世界空间目标方向
+	const FVector2D Axis = FlightInputAxis;
+	FVector WorldDir = FVector::ZeroVector;
 
-	// 目标速度 = 输入方向 × 最大速度
-	const FVector Target = InputDir.GetSafeNormal() * FlyingMaxSpeed;
+	if (!Axis.IsNearlyZero() && Controller)
+	{
+		const FRotator CR = Controller->GetControlRotation();
+		WorldDir += FRotationMatrix(CR).GetUnitAxis(EAxis::X) * Axis.X;  // 前后
+		WorldDir += FRotationMatrix(CR).GetUnitAxis(EAxis::Y) * Axis.Y;  // 左右
+		WorldDir.Normalize();
+	}
 
-	// 平滑插值当前速度 → 目标速度
-	MC->Velocity = FMath::VInterpTo(MC->Velocity, Target, DeltaTime, FlyingInterpSpeed);
+	// 目标速度
+	const FVector TargetVel = WorldDir * FlyingMaxSpeed;
+
+	// 平滑插值
+	MC->Velocity = FMath::VInterpTo(MC->Velocity, TargetVel, DeltaTime, FlyingInterpSpeed);
+
+	// 自己移动（MOVE_Custom 不会自动移动）
+	FHitResult Hit;
+	MC->SafeMoveUpdatedComponent(MC->Velocity * DeltaTime, GetCapsuleComponent()->GetComponentQuat(), true, Hit);
+
+	if (Hit.bBlockingHit)
+	{
+		// 简单的沿法线滑动
+		MC->Velocity = FVector::VectorPlaneProject(MC->Velocity, Hit.Normal);
+	}
 }

@@ -44,6 +44,9 @@ protected:
 	void Input_FlyPressed();
 	void Input_FlyReleased();
 
+	// --- 攻击 ---
+	void Input_Shoot();
+
 	// --- 飞行 ---
 	void MaintainFlight(float DeltaTime);
 
@@ -79,6 +82,9 @@ protected:
 	UPROPERTY()
 	TObjectPtr<UInputAction> FlyAction;
 
+	UPROPERTY()
+	TObjectPtr<UInputAction> ShootAction;
+
 	// ==================== 状态 ====================
 
 	bool bInputAssetsInitialized = false;
@@ -86,6 +92,9 @@ protected:
 
 	/** 鼠标视角输入累积（Input_Look 写入，Tick 消费并清零） */
 	FVector2D PendingLookDelta = FVector2D::ZeroVector;
+
+	/** 飞行时当前帧的输入轴（Forward, Right），由 Input 回调写入，MaintainFlight 读取 */
+	FVector2D FlightInputAxis = FVector2D::ZeroVector;
 
 	// ==================== 飞行参数 ====================
 
