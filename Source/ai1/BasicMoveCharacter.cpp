@@ -293,14 +293,9 @@ void ABasicMoveCharacter::Input_Shoot()
 {
 	if (!Controller) return;
 
-	UE_LOG(LogBasicMove, Warning, TEXT("Input_Shoot! Firing Fireball..."));
-	GEngine->AddOnScreenDebugMessage(-1, 1.f, FColor::Red, TEXT("SHOOT!"));
-
-	// 发射位置：角色位置 + 眼睛高度偏移
-	const FVector SpawnLoc = GetActorLocation() + FVector(0.f, 0.f, 50.f);
-
-	// 发射方向：相机朝向（含 Pitch）
-	const FVector ShootDir = Controller->GetControlRotation().Vector();
+	// 发射方向：角色面朝方向
+	const FVector ShootDir = GetActorForwardVector();
+	const FVector SpawnLoc = GetActorLocation() + ShootDir * 100.f + FVector(0.f, 0.f, 50.f);
 
 	FActorSpawnParameters Params;
 	Params.Owner = this;
@@ -311,11 +306,6 @@ void ABasicMoveCharacter::Input_Shoot()
 	if (Ball)
 	{
 		Ball->FireInDirection(ShootDir);
-		UE_LOG(LogBasicMove, Warning, TEXT("Fireball spawned at %s"), *SpawnLoc.ToString());
-	}
-	else
-	{
-		UE_LOG(LogBasicMove, Error, TEXT("Fireball spawn FAILED!"));
 	}
 }
 

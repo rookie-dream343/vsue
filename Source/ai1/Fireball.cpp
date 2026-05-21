@@ -39,9 +39,9 @@ void AFireball::Tick(float DeltaTime)
 		return;
 	}
 
-	// 每帧自己移动
-	FVector Delta = Velocity * DeltaTime;
-	AddActorWorldOffset(Delta, true);
+	// 每帧 teleport 移动
+	FVector NewLoc = GetActorLocation() + Velocity * DeltaTime;
+	SetActorLocation(NewLoc, false, nullptr, ETeleportType::TeleportPhysics);
 }
 
 void AFireball::FireInDirection(const FVector& ShootDirection)
