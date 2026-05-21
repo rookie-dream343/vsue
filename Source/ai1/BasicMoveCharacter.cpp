@@ -152,8 +152,9 @@ void ABasicMoveCharacter::InitializeInputAssets()
 	// 左 Shift = 跳跃
 	DefaultMappingContext->MapKey(JumpAction, EKeys::LeftShift);
 
-	// 鼠标左键 = 发射火球
+	// 鼠标左键 / E 键 = 发射火球
 	DefaultMappingContext->MapKey(ShootAction, EKeys::LeftMouseButton);
+	DefaultMappingContext->MapKey(ShootAction, EKeys::E);
 
 	UE_LOG(LogBasicMove, Warning, TEXT("Input assets created: MoveFwd/MoveRht/LookYaw/LookPitch/Jump/Fly/Shoot"));
 }
@@ -292,6 +293,9 @@ void ABasicMoveCharacter::Input_Shoot()
 {
 	if (!Controller) return;
 
+	UE_LOG(LogBasicMove, Warning, TEXT("Input_Shoot! Firing Fireball..."));
+	GEngine->AddOnScreenDebugMessage(-1, 1.f, FColor::Red, TEXT("SHOOT!"));
+
 	// 发射位置：角色位置 + 眼睛高度偏移
 	const FVector SpawnLoc = GetActorLocation() + FVector(0.f, 0.f, 50.f);
 
@@ -307,6 +311,11 @@ void ABasicMoveCharacter::Input_Shoot()
 	if (Ball)
 	{
 		Ball->FireInDirection(ShootDir);
+		UE_LOG(LogBasicMove, Warning, TEXT("Fireball spawned at %s"), *SpawnLoc.ToString());
+	}
+	else
+	{
+		UE_LOG(LogBasicMove, Error, TEXT("Fireball spawn FAILED!"));
 	}
 }
 

@@ -2,42 +2,57 @@
 
 #include "Fireball.h"
 #include "Components/SphereComponent.h"
-#include "GameFramework/ProjectileMovementComponent.h"
+#include "Components/StaticMeshComponent.h"
+#include "Engine/StaticMesh.h"
+#include "UObject/ConstructorHelpers.h"
 
 AFireball::AFireball()
 {
-	PrimaryActorTick.bCanEverTick = false;
+	PrimaryActorTick.bCanEverTick = true;
 
-	// 碰撞球（根组件）
 	CollisionSphere = CreateDefaultSubobject<USphereComponent>(TEXT("CollisionSphere"));
 	CollisionSphere->InitSphereRadius(20.f);
-	CollisionSphere->SetCollisionProfileName(TEXT("Projectile"));
-	CollisionSphere->SetNotifyRigidBodyCollision(true);
-	CollisionSphere->OnComponentHit.AddDynamic(this, &AFireball::OnHit);
+	CollisionSphere->SetCollisionProfileName(TEXT("OverlapAllDynamic"));
+	CollisionSphere->SetGenerateOverlapEvents(true);
+	CollisionSphere->OnComponentBeginOverlap.AddDynamic(this, &AFireball::OnOverlap);
 	RootComponent = CollisionSphere;
 
-	// 弹丸移动组件
-	ProjectileMovement = CreateDefaultSubobject<UProjectileMovementComponent>(TEXT("ProjectileMovement"));
-	ProjectileMovement->bRotationFollowsVelocity = true;
-	ProjectileMovement->bShouldBounce = false;
-	ProjectileMovement->InitialSpeed = FireballSpeed;
-	ProjectileMovement->MaxSpeed = FireballSpeed;
-	ProjectileMovement->ProjectileGravityScale = 0.f; // 无重力，直线飞行
+	MeshSphere = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("MeshSphere"));
+	MeshSphere->SetupAttachment(CollisionSphere);
+	MeshSphere->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	MeshSphere->SetRelativeScale3D(FVector(0.4f));
+	static ConstructorHelpers::FObjectFinder<UStaticMesh> SphereMesh(TEXT("/Engine/BasicShapes/Sphere"));
+	if (SphereMesh.Succeeded())
+	{
+		MeshSphere->SetStaticMesh(SphereMesh.Object);
+	}
+}
 
-	// 默认生命周期
-	InitialLifeSpan = Lifetime;
+void AFireball::Tick(float DeltaTime)
+{
+	Super::Tick(DeltaTime);
+
+	Elapsed += DeltaTime;
+	if (Elapsed > LifeTime)
+	{
+		Destroy();
+		return;
+	}
+
+	// 每帧自己移动
+	FVector Delta = Velocity * DeltaTime;
+	AddActorWorldOffset(Delta, true);
 }
 
 void AFireball::FireInDirection(const FVector& ShootDirection)
 {
-	ProjectileMovement->Velocity = ShootDirection * FireballSpeed;
+	Velocity = ShootDirection.GetSafeNormal() * Speed;
 }
 
-void AFireball::OnHit(UPrimitiveComponent* HitComp, AActor* OtherActor, UPrimitiveComponent* OtherComp,
-	FVector NormalImpulse, const FHitResult& Hit)
+void AFireball::OnOverlap(UPrimitiveComponent* OverlappedComp, AActor* OtherActor, UPrimitiveComponent* OtherComp,
+	int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult)
 {
-	// 击中后销毁（后续可扩展伤害逻辑）
-	if (OtherActor && OtherActor != this)
+	if (OtherActor && OtherActor != this && OtherActor != GetOwner() && OtherActor != GetInstigator())
 	{
 		Destroy();
 	}
